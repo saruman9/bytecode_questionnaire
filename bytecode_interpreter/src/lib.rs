@@ -79,6 +79,10 @@ impl ByteCode {
     pub fn position(&self) -> usize {
         self.position as usize
     }
+
+    pub(crate) fn stack_pop(&mut self) -> Result<Data, &'static str> {
+        self.stack.pop().ok_or("Stack is empty")
+    }
 }
 
 #[cfg(test)]

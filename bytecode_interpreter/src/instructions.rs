@@ -1,7 +1,5 @@
 use crate::{ByteCode, Data};
 
-const STACK_ERR: &str = "Stack is empty";
-
 pub type Ident = String;
 
 #[derive(Debug, PartialEq)]
@@ -71,7 +69,7 @@ impl Instruction {
                 bytecode.position += 1;
             }
             Instruction::WriteVar(ident) => {
-                let value = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let value = bytecode.stack_pop()?;
                 bytecode.memory.insert(ident.clone(), value);
                 bytecode.position += 1;
             }
@@ -84,8 +82,8 @@ impl Instruction {
                 bytecode.position += 1;
             }
             Instruction::Add => {
-                let lhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
-                let rhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let lhs = bytecode.stack_pop()?;
+                let rhs = bytecode.stack_pop()?;
                 bytecode.stack.push(
                     lhs.checked_add(rhs)
                         .ok_or(format!("Addition overflow occurred ({} + {})", lhs, rhs))?,
@@ -93,8 +91,8 @@ impl Instruction {
                 bytecode.position += 1;
             }
             Instruction::Sub => {
-                let rhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
-                let lhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let rhs = bytecode.stack_pop()?;
+                let lhs = bytecode.stack_pop()?;
                 bytecode.stack.push(lhs.checked_sub(rhs).ok_or(format!(
                     "Substraction overflow occurred ({} - {})",
                     lhs, rhs
@@ -102,8 +100,8 @@ impl Instruction {
                 bytecode.position += 1;
             }
             Instruction::Mul => {
-                let lhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
-                let rhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let lhs = bytecode.stack_pop()?;
+                let rhs = bytecode.stack_pop()?;
                 bytecode.stack.push(lhs.checked_mul(rhs).ok_or(format!(
                     "Multiplication overflow occurred ({} * {})",
                     lhs, rhs
@@ -111,16 +109,16 @@ impl Instruction {
                 bytecode.position += 1;
             }
             Instruction::RetVal => {
-                bytecode.ret = Some(bytecode.stack.pop().ok_or(STACK_ERR)?);
+                bytecode.ret = Some(bytecode.stack_pop()?);
                 bytecode.position += 1;
             }
             Instruction::Jump => {
-                bytecode.position = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                bytecode.position = bytecode.stack_pop()?;
             }
             Instruction::JumpLessThan => {
-                let position = bytecode.stack.pop().ok_or(STACK_ERR)?;
-                let rhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
-                let lhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let position = bytecode.stack_pop()?;
+                let rhs = bytecode.stack_pop()?;
+                let lhs = bytecode.stack_pop()?;
                 bytecode.position = if lhs < rhs {
                     position
                 } else {
@@ -128,9 +126,9 @@ impl Instruction {
                 };
             }
             Instruction::JumpGreaterThan => {
-                let position = bytecode.stack.pop().ok_or(STACK_ERR)?;
-                let rhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
-                let lhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let position = bytecode.stack_pop()?;
+                let rhs = bytecode.stack_pop()?;
+                let lhs = bytecode.stack_pop()?;
                 bytecode.position = if lhs > rhs {
                     position
                 } else {
@@ -138,9 +136,9 @@ impl Instruction {
                 };
             }
             Instruction::JumpEqual => {
-                let position = bytecode.stack.pop().ok_or(STACK_ERR)?;
-                let rhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
-                let lhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let position = bytecode.stack_pop()?;
+                let rhs = bytecode.stack_pop()?;
+                let lhs = bytecode.stack_pop()?;
                 bytecode.position = if lhs == rhs {
                     position
                 } else {
