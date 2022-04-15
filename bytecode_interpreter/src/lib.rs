@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{atomic::AtomicUsize, mpsc, Arc},
+};
 
 mod instructions;
 use instructions::{Ident, IndexedInstruction, Instruction, IteratorWrapper};
@@ -8,13 +11,20 @@ type Data = u128;
 type Stack = Vec<Data>;
 type Memory = HashMap<Ident, Data>;
 type Address = Data;
+// TODO: We should use UUID for example or another unique id
+type Id = usize;
 
 #[derive(Debug, Default)]
 pub struct ByteCode {
+    id: Id,
+    // FIXME: dirty hack
+    count_of_threads: Arc<AtomicUsize>,
     instructions: Vec<IndexedInstruction>,
     stack: Stack,
     memory: Memory,
     position: Address,
+    senders: HashMap<Id, mpsc::SyncSender<Data>>,
+    receivers: HashMap<Id, mpsc::Receiver<Data>>,
     ret: Option<Data>,
 }
 
@@ -698,7 +708,7 @@ JUMP
     #[test]
     fn spawn() {
         let input = r#"
-// spawn(1, 2)
+// spawn(f1, f2)
 LOAD_VAL 5
 LOAD_VAL 7
 SPAWN
@@ -718,4 +728,41 @@ RETURN_VALUE
         bytecode.interpret().unwrap();
         assert_eq!(*bytecode.ret().unwrap(), 0);
     }
+
+    #[test]
+    fn send_recv() {
+        let input = r#"
+// spawn(f_recv, f_send)
+LOAD_VAL 9
+LOAD_VAL 14
+SPAWN
+
+// return recv(1) + recv(2)
+LOAD_VAL 1
+RECV_CHANNEL
+LOAD_VAL 2
+RECV_CHANNEL
+ADD
+RETURN_VALUE
+
+// send(20)
+LOAD_VAL 20
+LOAD_VAL 0
+SEND_CHANNEL
+LOAD_VAL 0
+RETURN_VALUE
+
+// send(22)
+LOAD_VAL 22
+LOAD_VAL 0
+SEND_CHANNEL
+LOAD_VAL 0
+RETURN_VALUE
+"#;
+
+        let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
+        bytecode.interpret().unwrap();
+        assert_eq!(*bytecode.ret().unwrap(), 42);
+    }
+
 }

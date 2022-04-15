@@ -1,4 +1,4 @@
-use std::thread;
+use std::{sync::atomic::Ordering, sync::mpsc, thread};
 
 use crate::{ByteCode, Data};
 
@@ -18,6 +18,8 @@ pub enum Instruction {
     JumpGreaterThan,
     JumpEqual,
     Spawn,
+    SendChannel,
+    RecvChannel,
     Unk,
 }
 
@@ -59,6 +61,8 @@ where
             "JUMP_GREATER_THAN" => Self::JumpGreaterThan,
             "JUMP_EQUAL" => Self::JumpEqual,
             "SPAWN" => Self::Spawn,
+            "SEND_CHANNEL" => Self::SendChannel,
+            "RECV_CHANNEL" => Self::RecvChannel,
             _ => return Err("Unknown instruction"),
         };
         Ok(instruction)
@@ -114,7 +118,7 @@ impl Instruction {
             }
             Instruction::RetVal => {
                 bytecode.ret = Some(bytecode.stack_pop()?);
-                bytecode.position += 1;
+                bytecode.count_of_threads.fetch_sub(1, Ordering::Relaxed);
             }
             Instruction::Jump => {
                 bytecode.position = bytecode.stack_pop()?;
@@ -152,22 +156,59 @@ impl Instruction {
             Instruction::Spawn => {
                 let start_a = bytecode.stack_pop()?;
                 let start_b = bytecode.stack_pop()?;
+
                 let mut bytecode_a = ByteCode::new(bytecode.instructions().to_vec());
+                bytecode_a.count_of_threads = bytecode.count_of_threads.clone();
+                bytecode_a.id = bytecode.count_of_threads.fetch_add(1, Ordering::Relaxed) + 1;
                 bytecode_a.position = start_a;
+
+                let (tx, rx) = mpsc::sync_channel(0);
+                bytecode.receivers.insert(bytecode_a.id, rx);
+                bytecode_a.senders.insert(bytecode.id, tx);
+
                 let mut bytecode_b = ByteCode::new(bytecode.instructions().to_vec());
+                bytecode_b.count_of_threads = bytecode.count_of_threads.clone();
+                bytecode_b.id = bytecode.count_of_threads.fetch_add(1, Ordering::Relaxed) + 1;
                 bytecode_b.position = start_b;
+
+                let (tx, rx) = mpsc::sync_channel(0);
+                bytecode.receivers.insert(bytecode_b.id, rx);
+                bytecode_b.senders.insert(bytecode.id, tx);
+
                 thread::Builder::new()
-                    .name(format!("{}", start_a))
+                    .name(format!("{}", bytecode_a.id))
                     .spawn(move || {
                         bytecode_a.interpret().unwrap();
                     })
                     .unwrap();
                 thread::Builder::new()
-                    .name(format!("{}", start_b))
+                    .name(format!("{}", bytecode_b.id))
                     .spawn(move || {
                         bytecode_b.interpret().unwrap();
                     })
                     .unwrap();
+                bytecode.position += 1;
+            }
+            Instruction::SendChannel => {
+                let channel = bytecode.stack_pop()?;
+                let data = bytecode.stack_pop()?;
+                bytecode
+                    .senders
+                    .get(&(channel as usize))
+                    .ok_or(format!("Sender {} doesn't exist", channel))?
+                    .send(data)
+                    .map_err(|e| format!("Sender ({}) failed: {}", channel, e))?;
+                bytecode.position += 1;
+            }
+            Instruction::RecvChannel => {
+                let channel = bytecode.stack_pop()?;
+                let data = bytecode
+                    .receivers
+                    .get(&(channel as usize))
+                    .ok_or(format!("Receiver {} doesn't exist", channel))?
+                    .recv()
+                    .map_err(|e| format!("Receiver failed: {}", e))?;
+                bytecode.stack.push(data);
                 bytecode.position += 1;
             }
             Instruction::Unk => unreachable!(),
