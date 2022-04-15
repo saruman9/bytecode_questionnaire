@@ -143,7 +143,7 @@ RETURN_VALUE
     }
 
     #[test]
-    fn parse_interpret_0() {
+    fn parse_and_interpret() {
         let input = r#"
 // x = 1
 LOAD_VAL 1
@@ -186,7 +186,7 @@ RETURN_VALUE
     }
 
     #[test]
-    fn parse_interpret_jump_ret_x() {
+    fn jump_ret_x() {
         let input = r#"
 // x = 1
 LOAD_VAL 1
@@ -200,7 +200,7 @@ JUMP
 LOAD_VAL 2
 WRITE_VAR y
 
-//z = 56
+// z = 56
 LOAD_VAL 56
 WRITE_VAR z
 
@@ -237,7 +237,7 @@ RETURN_VALUE
     }
 
     #[test]
-    fn parse_interpret_jump_ret_sum_of_xyw() {
+    fn jump_ret_sum_of_xyw() {
         let input = r#"
 // x = 1
 LOAD_VAL 1
@@ -247,7 +247,7 @@ WRITE_VAR x
 LOAD_VAL 2
 WRITE_VAR y
 
-//z = 56
+// z = 56
 LOAD_VAL 56
 WRITE_VAR z
 
@@ -296,7 +296,7 @@ RETURN_VALUE
     }
 
     #[test]
-    fn parse_interpret_jump_and_jump() {
+    fn jump_and_jump() {
         let input = r#"
 // x = 1
 LOAD_VAL 1
@@ -306,7 +306,7 @@ WRITE_VAR x
 LOAD_VAL 2
 WRITE_VAR y
 
-//z = 56
+// z = 56
 LOAD_VAL 56
 WRITE_VAR z
 
@@ -360,5 +360,220 @@ JUMP
         let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
         bytecode.interpret().unwrap();
         assert_eq!(*bytecode.ret().unwrap() as u32, 42);
+    }
+
+    #[test]
+    fn jump_less_than_0() {
+        let input = r#"
+// x = 1
+LOAD_VAL 1
+WRITE_VAR x
+
+// y = 2
+LOAD_VAL 2
+WRITE_VAR y
+
+// z = 56
+LOAD_VAL 56
+WRITE_VAR z
+
+// w = z + x + y
+READ_VAR z
+READ_VAR x
+ADD
+READ_VAR y
+ADD
+WRITE_VAR w
+
+// if 256 < w {
+//   return 1337
+// }
+// return 0
+LOAD_VAL 256
+READ_VAR w
+LOAD_VAL 19
+JUMP_LESS_THAN
+LOAD_VAL 0
+LOAD_VAL 20
+JUMP
+LOAD_VAL 1337
+RETURN_VALUE
+"#;
+
+        let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
+        bytecode.interpret().unwrap();
+        assert_eq!(*bytecode.ret().unwrap() as u32, 0);
+    }
+
+    #[test]
+    fn jump_less_than_1() {
+        let input = r#"
+// x = 1
+LOAD_VAL 1
+WRITE_VAR x
+
+// y = 2
+LOAD_VAL 2
+WRITE_VAR y
+
+// z = 56
+LOAD_VAL 56
+WRITE_VAR z
+
+// w = z + x + y
+READ_VAR z
+READ_VAR x
+ADD
+READ_VAR y
+ADD
+WRITE_VAR w
+
+// if w < 256 {
+//   return 1337
+// }
+// return 0
+READ_VAR w
+LOAD_VAL 256
+LOAD_VAL 19
+JUMP_LESS_THAN
+LOAD_VAL 0
+LOAD_VAL 20
+JUMP
+LOAD_VAL 1337
+RETURN_VALUE
+"#;
+
+        let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
+        bytecode.interpret().unwrap();
+        assert_eq!(*bytecode.ret().unwrap() as u32, 1337);
+    }
+
+    #[test]
+    fn jump_greater_than_0() {
+        let input = r#"
+// x = 1
+LOAD_VAL 1
+WRITE_VAR x
+
+// y = 2
+LOAD_VAL 2
+WRITE_VAR y
+
+// z = 56
+LOAD_VAL 56
+WRITE_VAR z
+
+// w = z + x + y
+READ_VAR z
+READ_VAR x
+ADD
+READ_VAR y
+ADD
+WRITE_VAR w
+
+// if 256 > w {
+//   return 1337
+// }
+// return 0
+LOAD_VAL 256
+READ_VAR w
+LOAD_VAL 19
+JUMP_GREATER_THAN
+LOAD_VAL 0
+LOAD_VAL 20
+JUMP
+LOAD_VAL 1337
+RETURN_VALUE
+"#;
+
+        let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
+        bytecode.interpret().unwrap();
+        assert_eq!(*bytecode.ret().unwrap() as u32, 1337);
+    }
+
+    #[test]
+    fn jump_greater_than_1() {
+        let input = r#"
+// x = 1
+LOAD_VAL 1
+WRITE_VAR x
+
+// y = 2
+LOAD_VAL 2
+WRITE_VAR y
+
+// z = 56
+LOAD_VAL 56
+WRITE_VAR z
+
+// w = z + x + y
+READ_VAR z
+READ_VAR x
+ADD
+READ_VAR y
+ADD
+WRITE_VAR w
+
+// if w > 256 {
+//   return 1337
+// }
+// return 0
+READ_VAR w
+LOAD_VAL 256
+LOAD_VAL 19
+JUMP_GREATER_THAN
+LOAD_VAL 0
+LOAD_VAL 20
+JUMP
+LOAD_VAL 1337
+RETURN_VALUE
+"#;
+
+        let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
+        bytecode.interpret().unwrap();
+        assert_eq!(*bytecode.ret().unwrap() as u32, 0);
+    }
+
+    #[test]
+    fn jump_equal() {
+        let input = r#"
+// x = 1
+LOAD_VAL 1
+WRITE_VAR x
+
+// y = 2
+LOAD_VAL 2
+WRITE_VAR y
+
+// z = 56
+LOAD_VAL 56
+WRITE_VAR z
+
+// w = z + x + y
+READ_VAR z
+READ_VAR x
+ADD
+READ_VAR y
+ADD
+WRITE_VAR w
+
+// if w == 59 {
+//   return 1337
+// }
+// return 0
+READ_VAR w
+LOAD_VAL 59
+LOAD_VAL 19
+JUMP_EQUAL
+LOAD_VAL 0
+LOAD_VAL 20
+JUMP
+LOAD_VAL 1337
+RETURN_VALUE
+"#;
+
+        let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
+        bytecode.interpret().unwrap();
+        assert_eq!(*bytecode.ret().unwrap() as u32, 1337);
     }
 }

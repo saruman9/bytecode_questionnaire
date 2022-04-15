@@ -11,6 +11,9 @@ pub enum Instruction {
     Mul,
     RetVal,
     Jump,
+    JumpLessThan,
+    JumpGreaterThan,
+    JumpEqual,
     Unk,
 }
 
@@ -47,6 +50,9 @@ where
             "MULTIPLY" => Self::Mul,
             "RETURN_VALUE" => Self::RetVal,
             "JUMP" => Self::Jump,
+            "JUMP_LESS_THAN" => Self::JumpLessThan,
+            "JUMP_GREATER_THAN" => Self::JumpGreaterThan,
+            "JUMP_EQUAL" => Self::JumpEqual,
             _ => return Err("Unknown instruction"),
         };
         Ok(instruction)
@@ -93,6 +99,36 @@ impl Instruction {
             }
             Instruction::Jump => {
                 bytecode.position = bytecode.stack.pop().ok_or("Stack is empty")?;
+            }
+            Instruction::JumpLessThan => {
+                let position = bytecode.stack.pop().ok_or("Stack is empty")?;
+                let rhs = bytecode.stack.pop().ok_or("Stack is empty")?;
+                let lhs = bytecode.stack.pop().ok_or("Stack is empty")?;
+                bytecode.position = if lhs < rhs {
+                    position
+                } else {
+                    bytecode.position + 1
+                };
+            }
+            Instruction::JumpGreaterThan => {
+                let position = bytecode.stack.pop().ok_or("Stack is empty")?;
+                let rhs = bytecode.stack.pop().ok_or("Stack is empty")?;
+                let lhs = bytecode.stack.pop().ok_or("Stack is empty")?;
+                bytecode.position = if lhs > rhs {
+                    position
+                } else {
+                    bytecode.position + 1
+                };
+            }
+            Instruction::JumpEqual => {
+                let position = bytecode.stack.pop().ok_or("Stack is empty")?;
+                let rhs = bytecode.stack.pop().ok_or("Stack is empty")?;
+                let lhs = bytecode.stack.pop().ok_or("Stack is empty")?;
+                bytecode.position = if lhs == rhs {
+                    position
+                } else {
+                    bytecode.position + 1
+                };
             }
             Instruction::Unk => unreachable!(),
         }
