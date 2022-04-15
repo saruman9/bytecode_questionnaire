@@ -1,5 +1,7 @@
 use crate::{ByteCode, Data};
 
+const STACK_ERR: &str = "Stack is empty";
+
 pub type Ident = String;
 
 #[derive(Debug, PartialEq)]
@@ -8,6 +10,7 @@ pub enum Instruction {
     WriteVar(Ident),
     ReadVar(Ident),
     Add,
+    Sub,
     Mul,
     RetVal,
     Jump,
@@ -47,6 +50,7 @@ where
             "WRITE_VAR" => Self::WriteVar(iter.next().ok_or("Empty operand for WRITE_VAR")?.into()),
             "READ_VAR" => Self::ReadVar(iter.next().ok_or("Empty operand for READ_VAR")?.into()),
             "ADD" => Self::Add,
+            "SUB" => Self::Sub,
             "MULTIPLY" => Self::Mul,
             "RETURN_VALUE" => Self::RetVal,
             "JUMP" => Self::Jump,
@@ -60,50 +64,63 @@ where
 }
 
 impl Instruction {
-    pub fn interpret(&self, bytecode: &mut ByteCode) -> Result<(), &'static str> {
+    pub fn interpret(&self, bytecode: &mut ByteCode) -> Result<(), String> {
         match self {
             Instruction::LoadVal(value) => {
                 bytecode.stack.push(*value);
                 bytecode.position += 1;
             }
             Instruction::WriteVar(ident) => {
-                let value = bytecode.stack.pop().ok_or("Stack is empty")?;
+                let value = bytecode.stack.pop().ok_or(STACK_ERR)?;
                 bytecode.memory.insert(ident.clone(), value);
                 bytecode.position += 1;
             }
             Instruction::ReadVar(ident) => {
-                let value = bytecode.memory.get(ident).ok_or("Variable doesn't exist")?;
+                let value = bytecode
+                    .memory
+                    .get(ident)
+                    .ok_or(format!("Variable `{}` doesn't exist", ident))?;
                 bytecode.stack.push(*value);
                 bytecode.position += 1;
             }
             Instruction::Add => {
-                let lhs = bytecode.stack.pop().ok_or("Stack is empty")?;
-                let rhs = bytecode.stack.pop().ok_or("Stack is empty")?;
-                bytecode
-                    .stack
-                    .push(lhs.checked_add(rhs).ok_or("Addition overflow occurred")?);
-                bytecode.position += 1;
-            }
-            Instruction::Mul => {
-                let lhs = bytecode.stack.pop().ok_or("Stack is empty")?;
-                let rhs = bytecode.stack.pop().ok_or("Stack is empty")?;
+                let lhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let rhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
                 bytecode.stack.push(
-                    lhs.checked_mul(rhs)
-                        .ok_or("Multiplication overflow occurred")?,
+                    lhs.checked_add(rhs)
+                        .ok_or(format!("Addition overflow occurred ({} + {})", lhs, rhs))?,
                 );
                 bytecode.position += 1;
             }
+            Instruction::Sub => {
+                let rhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let lhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                bytecode.stack.push(lhs.checked_sub(rhs).ok_or(format!(
+                    "Substraction overflow occurred ({} - {})",
+                    lhs, rhs
+                ))?);
+                bytecode.position += 1;
+            }
+            Instruction::Mul => {
+                let lhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let rhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                bytecode.stack.push(lhs.checked_mul(rhs).ok_or(format!(
+                    "Multiplication overflow occurred ({} * {})",
+                    lhs, rhs
+                ))?);
+                bytecode.position += 1;
+            }
             Instruction::RetVal => {
-                bytecode.ret = Some(bytecode.stack.pop().ok_or("Stack is empty")?);
+                bytecode.ret = Some(bytecode.stack.pop().ok_or(STACK_ERR)?);
                 bytecode.position += 1;
             }
             Instruction::Jump => {
-                bytecode.position = bytecode.stack.pop().ok_or("Stack is empty")?;
+                bytecode.position = bytecode.stack.pop().ok_or(STACK_ERR)?;
             }
             Instruction::JumpLessThan => {
-                let position = bytecode.stack.pop().ok_or("Stack is empty")?;
-                let rhs = bytecode.stack.pop().ok_or("Stack is empty")?;
-                let lhs = bytecode.stack.pop().ok_or("Stack is empty")?;
+                let position = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let rhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let lhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
                 bytecode.position = if lhs < rhs {
                     position
                 } else {
@@ -111,9 +128,9 @@ impl Instruction {
                 };
             }
             Instruction::JumpGreaterThan => {
-                let position = bytecode.stack.pop().ok_or("Stack is empty")?;
-                let rhs = bytecode.stack.pop().ok_or("Stack is empty")?;
-                let lhs = bytecode.stack.pop().ok_or("Stack is empty")?;
+                let position = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let rhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let lhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
                 bytecode.position = if lhs > rhs {
                     position
                 } else {
@@ -121,9 +138,9 @@ impl Instruction {
                 };
             }
             Instruction::JumpEqual => {
-                let position = bytecode.stack.pop().ok_or("Stack is empty")?;
-                let rhs = bytecode.stack.pop().ok_or("Stack is empty")?;
-                let lhs = bytecode.stack.pop().ok_or("Stack is empty")?;
+                let position = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let rhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
+                let lhs = bytecode.stack.pop().ok_or(STACK_ERR)?;
                 bytecode.position = if lhs == rhs {
                     position
                 } else {

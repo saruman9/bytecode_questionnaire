@@ -576,4 +576,50 @@ RETURN_VALUE
         bytecode.interpret().unwrap();
         assert_eq!(*bytecode.ret().unwrap() as u32, 1337);
     }
+
+    #[test]
+    fn while_0() {
+        let input = r#"
+// base = 12
+LOAD_VAL 12
+WRITE_VAR base
+
+// exponent = 15
+LOAD_VAL 15
+WRITE_VAR exponent
+
+// result = 1
+LOAD_VAL 1
+WRITE_VAR result
+
+// while (exponent > 0) {
+//   result = result * base
+//   exponent =- 1
+// }
+READ_VAR exponent
+LOAD_VAL 0
+LOAD_VAL 12
+JUMP_GREATER_THAN
+
+// return result
+READ_VAR result
+RETURN_VALUE
+
+// body from while statement
+READ_VAR result
+READ_VAR base
+MULTIPLY
+WRITE_VAR result
+READ_VAR exponent
+LOAD_VAL 1
+SUB
+WRITE_VAR exponent
+LOAD_VAL 6
+JUMP
+"#;
+
+        let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
+        bytecode.interpret().unwrap();
+        assert_eq!(*bytecode.ret().unwrap(), 15_407_021_574_586_368);
+    }
 }
