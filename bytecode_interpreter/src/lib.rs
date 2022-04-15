@@ -11,7 +11,7 @@ type Address = Data;
 
 #[derive(Debug, Default)]
 pub struct ByteCode {
-    instructions: Option<Vec<IndexedInstruction>>,
+    instructions: Vec<IndexedInstruction>,
     stack: Stack,
     memory: Memory,
     position: Address,
@@ -21,7 +21,7 @@ pub struct ByteCode {
 impl ByteCode {
     pub fn new(instructions: Vec<IndexedInstruction>) -> Self {
         Self {
-            instructions: Some(instructions),
+            instructions,
             ..Default::default()
         }
     }
@@ -48,15 +48,12 @@ impl ByteCode {
         Ok(Self::new(instructions))
     }
 
-    pub fn instructions(&self) -> Option<&[IndexedInstruction]> {
-        self.instructions.as_ref().map(AsRef::as_ref)
+    pub fn instructions(&self) -> &[IndexedInstruction] {
+        &self.instructions
     }
 
     pub fn interpret(&mut self) -> Result<(), String> {
-        let instructions = self
-            .instructions
-            .take()
-            .ok_or("Instructions doesn't exist")?;
+        let instructions = self.instructions.clone();
         while self.ret().is_none() {
             let instruction = instructions.get(self.position()).ok_or(format!(
                 "Instruction doesn't exist at {} position",
@@ -123,7 +120,6 @@ RETURN_VALUE
         assert!(&ByteCode::from_bytecode_text(input)
             .unwrap()
             .instructions()
-            .unwrap()
             .iter()
             .eq(output.iter()));
     }
@@ -697,5 +693,29 @@ JUMP
         let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
         bytecode.interpret().unwrap();
         assert_eq!(*bytecode.ret().unwrap(), 3_524_578);
+    }
+
+    #[test]
+    fn spawn() {
+        let input = r#"
+// spawn(1, 2)
+LOAD_VAL 5
+LOAD_VAL 7
+SPAWN
+LOAD_VAL 0
+RETURN_VALUE
+
+// return 1
+LOAD_VAL 1
+RETURN_VALUE
+
+// return 2
+LOAD_VAL 2
+RETURN_VALUE
+"#;
+
+        let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
+        bytecode.interpret().unwrap();
+        assert_eq!(*bytecode.ret().unwrap(), 0);
     }
 }

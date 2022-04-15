@@ -1,8 +1,10 @@
+use std::thread;
+
 use crate::{ByteCode, Data};
 
 pub type Ident = String;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
     LoadVal(Data),
     WriteVar(Ident),
@@ -15,6 +17,7 @@ pub enum Instruction {
     JumpLessThan,
     JumpGreaterThan,
     JumpEqual,
+    Spawn,
     Unk,
 }
 
@@ -55,6 +58,7 @@ where
             "JUMP_LESS_THAN" => Self::JumpLessThan,
             "JUMP_GREATER_THAN" => Self::JumpGreaterThan,
             "JUMP_EQUAL" => Self::JumpEqual,
+            "SPAWN" => Self::Spawn,
             _ => return Err("Unknown instruction"),
         };
         Ok(instruction)
@@ -145,13 +149,34 @@ impl Instruction {
                     bytecode.position + 1
                 };
             }
+            Instruction::Spawn => {
+                let start_a = bytecode.stack_pop()?;
+                let start_b = bytecode.stack_pop()?;
+                let mut bytecode_a = ByteCode::new(bytecode.instructions().to_vec());
+                bytecode_a.position = start_a;
+                let mut bytecode_b = ByteCode::new(bytecode.instructions().to_vec());
+                bytecode_b.position = start_b;
+                thread::Builder::new()
+                    .name(format!("{}", start_a))
+                    .spawn(move || {
+                        bytecode_a.interpret().unwrap();
+                    })
+                    .unwrap();
+                thread::Builder::new()
+                    .name(format!("{}", start_b))
+                    .spawn(move || {
+                        bytecode_b.interpret().unwrap();
+                    })
+                    .unwrap();
+                bytecode.position += 1;
+            }
             Instruction::Unk => unreachable!(),
         }
         Ok(())
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct IndexedInstruction {
     index: usize,
     instruction: Instruction,
