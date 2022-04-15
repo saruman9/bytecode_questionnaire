@@ -1,5 +1,13 @@
 # Answers
 
+- [Answers](#answers)
+  - [Bytecode interpreter](#bytecode-interpreter)
+    - [Base](#base)
+    - [Loops](#loops)
+    - [Spawn and message passing](#spawn-and-message-passing)
+  - [Custom `walkdir`](#custom-walkdir)
+  - [Blockchain](#blockchain)
+
 ## Bytecode interpreter
 
 ### Base
