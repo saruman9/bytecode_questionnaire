@@ -1,22 +1,25 @@
 use std::collections::HashMap;
 
 mod instructions;
-use instructions::{Ident, Instruction, IteratorWrapper};
+use instructions::{Ident, IndexedInstruction, Instruction, IteratorWrapper};
 
+// TODO: There should be a hash number like `u256`
 type Data = u128;
 type Stack = Vec<Data>;
 type Memory = HashMap<Ident, Data>;
+type Address = Data;
 
 #[derive(Debug, Default)]
 pub struct ByteCode {
-    instructions: Option<Vec<(usize, Instruction)>>,
+    instructions: Option<Vec<IndexedInstruction>>,
     stack: Stack,
     memory: Memory,
+    position: Address,
     ret: Option<Data>,
 }
 
 impl ByteCode {
-    pub fn new(instructions: Vec<(usize, Instruction)>) -> Self {
+    pub fn new(instructions: Vec<IndexedInstruction>) -> Self {
         Self {
             instructions: Some(instructions),
             ..Default::default()
@@ -40,25 +43,30 @@ impl ByteCode {
         }
         let instructions = instructions
             .into_iter()
-            .map(|(i, ins)| (i, ins.unwrap()))
+            .map(|(i, ins)| IndexedInstruction::new(i, ins.unwrap()))
             .collect();
         Ok(Self::new(instructions))
     }
 
-    pub fn instructions(&self) -> Option<&[(usize, Instruction)]> {
+    pub fn instructions(&self) -> Option<&[IndexedInstruction]> {
         self.instructions.as_ref().map(AsRef::as_ref)
     }
 
     pub fn interpret(&mut self) -> Result<(), String> {
-        let instructions = self.instructions.take();
-        for instruction in instructions
-            .ok_or("Instructions doesn't exist")?
-            .into_iter()
-        {
+        let instructions = self
+            .instructions
+            .take()
+            .ok_or("Instructions doesn't exist")?;
+        while self.ret().is_none() {
+            let instruction = instructions.get(self.position()).ok_or(format!(
+                "Instruction doesn't exist at {} position",
+                self.position
+            ))?;
             instruction
-                .1
+                .instruction()
                 .interpret(self)
-                .map_err(|e| format!("Line: {}, error: {}", instruction.0, e))?;
+                .map_err(|e| format!("Line: {}, error: {}", instruction.index(), e))?;
+            dbg!(instruction, self.position, &self.stack);
         }
         Ok(())
     }
@@ -66,11 +74,15 @@ impl ByteCode {
     pub fn ret(&self) -> Option<&Data> {
         self.ret.as_ref()
     }
+
+    pub fn position(&self) -> usize {
+        self.position as usize
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{ByteCode, Instruction};
+    use crate::{instructions::IndexedInstruction, ByteCode, Instruction};
 
     #[test]
     fn parse_bytecode_example() {
@@ -92,16 +104,16 @@ MULTIPLY
 RETURN_VALUE
 "#;
         let output = [
-            (2, Instruction::LoadVal(1)),
-            (3, Instruction::WriteVar("x".into())),
-            (5, Instruction::LoadVal(2)),
-            (6, Instruction::WriteVar("y".into())),
-            (8, Instruction::ReadVar("x".into())),
-            (9, Instruction::LoadVal(1)),
-            (10, Instruction::Add),
-            (12, Instruction::ReadVar("y".into())),
-            (13, Instruction::Mul),
-            (15, Instruction::RetVal),
+            IndexedInstruction::new(2, Instruction::LoadVal(1)),
+            IndexedInstruction::new(3, Instruction::WriteVar("x".into())),
+            IndexedInstruction::new(5, Instruction::LoadVal(2)),
+            IndexedInstruction::new(6, Instruction::WriteVar("y".into())),
+            IndexedInstruction::new(8, Instruction::ReadVar("x".into())),
+            IndexedInstruction::new(9, Instruction::LoadVal(1)),
+            IndexedInstruction::new(10, Instruction::Add),
+            IndexedInstruction::new(12, Instruction::ReadVar("y".into())),
+            IndexedInstruction::new(13, Instruction::Mul),
+            IndexedInstruction::new(15, Instruction::RetVal),
         ];
         assert!(&ByteCode::from_bytecode_text(input)
             .unwrap()
@@ -114,16 +126,16 @@ RETURN_VALUE
     #[test]
     fn interpret_example() {
         let instructions = vec![
-            (0, Instruction::LoadVal(1)),
-            (0, Instruction::WriteVar("x".into())),
-            (0, Instruction::LoadVal(2)),
-            (0, Instruction::WriteVar("y".into())),
-            (0, Instruction::ReadVar("x".into())),
-            (0, Instruction::LoadVal(1)),
-            (0, Instruction::Add),
-            (0, Instruction::ReadVar("y".into())),
-            (0, Instruction::Mul),
-            (0, Instruction::RetVal),
+            IndexedInstruction::new(0, Instruction::LoadVal(1)),
+            IndexedInstruction::new(0, Instruction::WriteVar("x".into())),
+            IndexedInstruction::new(0, Instruction::LoadVal(2)),
+            IndexedInstruction::new(0, Instruction::WriteVar("y".into())),
+            IndexedInstruction::new(0, Instruction::ReadVar("x".into())),
+            IndexedInstruction::new(0, Instruction::LoadVal(1)),
+            IndexedInstruction::new(0, Instruction::Add),
+            IndexedInstruction::new(0, Instruction::ReadVar("y".into())),
+            IndexedInstruction::new(0, Instruction::Mul),
+            IndexedInstruction::new(0, Instruction::RetVal),
         ];
         let mut bytecode = ByteCode::new(instructions);
         bytecode.interpret().unwrap();
@@ -136,12 +148,15 @@ RETURN_VALUE
 // x = 1
 LOAD_VAL 1
 WRITE_VAR x
+
 // y = 2
 LOAD_VAL 2
 WRITE_VAR y
-//z = 56
+
+// z = 56
 LOAD_VAL 56
 WRITE_VAR z
+
 // w = z + x + y
 READ_VAR z
 READ_VAR x
@@ -149,28 +164,201 @@ ADD
 READ_VAR y
 ADD
 WRITE_VAR w
+
 // return (x + 1) * y * z + (w + 33)
 READ_VAR w
 LOAD_VAL 33
 ADD
-
 READ_VAR x
 LOAD_VAL 1
 ADD
-
 READ_VAR y
 MULTIPLY
-
 READ_VAR z
 MULTIPLY
-
 ADD
-
 RETURN_VALUE
 "#;
 
         let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
         bytecode.interpret().unwrap();
         assert_eq!(*bytecode.ret().unwrap() as u32, 316);
+    }
+
+    #[test]
+    fn parse_interpret_jump_ret_x() {
+        let input = r#"
+// x = 1
+LOAD_VAL 1
+WRITE_VAR x
+
+// goto ret_x_label
+LOAD_VAL 26
+JUMP
+
+// y = 2
+LOAD_VAL 2
+WRITE_VAR y
+
+//z = 56
+LOAD_VAL 56
+WRITE_VAR z
+
+// w = z + x + y
+READ_VAR z
+READ_VAR x
+ADD
+READ_VAR y
+ADD
+WRITE_VAR w
+
+// return (x + 1) * y * z + (w + 33)
+READ_VAR w
+LOAD_VAL 33
+ADD
+READ_VAR x
+LOAD_VAL 1
+ADD
+READ_VAR y
+MULTIPLY
+READ_VAR z
+MULTIPLY
+ADD
+RETURN_VALUE
+
+// ret_x_label: return x
+READ_VAR x
+RETURN_VALUE
+"#;
+
+        let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
+        bytecode.interpret().unwrap();
+        assert_eq!(*bytecode.ret().unwrap() as u32, 1);
+    }
+
+    #[test]
+    fn parse_interpret_jump_ret_sum_of_xyw() {
+        let input = r#"
+// x = 1
+LOAD_VAL 1
+WRITE_VAR x
+
+// y = 2
+LOAD_VAL 2
+WRITE_VAR y
+
+//z = 56
+LOAD_VAL 56
+WRITE_VAR z
+
+// w = z + x + y
+READ_VAR z
+READ_VAR x
+ADD
+READ_VAR y
+ADD
+WRITE_VAR w
+
+// goto ret_xyw_label
+LOAD_VAL 28
+JUMP
+
+// return (x + 1) * y * z + (w + 33)
+READ_VAR w
+LOAD_VAL 33
+ADD
+READ_VAR x
+LOAD_VAL 1
+ADD
+READ_VAR y
+MULTIPLY
+READ_VAR z
+MULTIPLY
+ADD
+RETURN_VALUE
+
+// ret_x_label: return x
+READ_VAR x
+RETURN_VALUE
+
+// ret_xyw_label: return x + y + w
+READ_VAR x
+READ_VAR y
+ADD
+READ_VAR w
+ADD
+RETURN_VALUE
+"#;
+
+        let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
+        bytecode.interpret().unwrap();
+        assert_eq!(*bytecode.ret().unwrap() as u32, 62);
+    }
+
+    #[test]
+    fn parse_interpret_jump_and_jump() {
+        let input = r#"
+// x = 1
+LOAD_VAL 1
+WRITE_VAR x
+
+// y = 2
+LOAD_VAL 2
+WRITE_VAR y
+
+//z = 56
+LOAD_VAL 56
+WRITE_VAR z
+
+// w = z + x + y
+READ_VAR z
+READ_VAR x
+ADD
+READ_VAR y
+ADD
+WRITE_VAR w
+
+// goto set_x_label
+LOAD_VAL 34
+JUMP
+
+// return (x + 1) * y * z + (w + 33)
+READ_VAR w
+LOAD_VAL 33
+ADD
+READ_VAR x
+LOAD_VAL 1
+ADD
+READ_VAR y
+MULTIPLY
+READ_VAR z
+MULTIPLY
+ADD
+RETURN_VALUE
+
+// ret_x_label: return x
+READ_VAR x
+RETURN_VALUE
+
+// ret_xyw_label: return x + y + w
+READ_VAR x
+READ_VAR y
+ADD
+READ_VAR w
+ADD
+RETURN_VALUE
+
+// set_x_label: x = 42
+LOAD_VAL 42
+WRITE_VAR x
+
+// goto ret_x_label
+LOAD_VAL 26
+JUMP
+"#;
+
+        let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
+        bytecode.interpret().unwrap();
+        assert_eq!(*bytecode.ret().unwrap() as u32, 42);
     }
 }
