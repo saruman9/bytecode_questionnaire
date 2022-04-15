@@ -20,6 +20,7 @@ pub enum Instruction {
     Spawn,
     SendChannel,
     RecvChannel,
+    Log,
     Unk,
 }
 
@@ -63,6 +64,7 @@ where
             "SPAWN" => Self::Spawn,
             "SEND_CHANNEL" => Self::SendChannel,
             "RECV_CHANNEL" => Self::RecvChannel,
+            "LOG" => Self::Log,
             _ => return Err("Unknown instruction"),
         };
         Ok(instruction)
@@ -154,8 +156,11 @@ impl Instruction {
                 };
             }
             Instruction::Spawn => {
-                let start_a = bytecode.stack_pop()?;
                 let start_b = bytecode.stack_pop()?;
+                let arguments_b = bytecode.stack_pop()?;
+
+                let start_a = bytecode.stack_pop()?;
+                let arguments_a = bytecode.stack_pop()?;
 
                 let mut bytecode_a = ByteCode::new(bytecode.instructions().to_vec());
                 bytecode_a.count_of_threads = bytecode.count_of_threads.clone();
@@ -170,6 +175,13 @@ impl Instruction {
                 bytecode_b.count_of_threads = bytecode.count_of_threads.clone();
                 bytecode_b.id = bytecode.count_of_threads.fetch_add(1, Ordering::Relaxed) + 1;
                 bytecode_b.position = start_b;
+
+                for _ in 0..arguments_b {
+                    bytecode_b.stack.push(bytecode.stack_pop()?);
+                }
+                for _ in 0..arguments_a {
+                    bytecode_a.stack.push(bytecode.stack_pop()?);
+                }
 
                 let (tx, rx) = mpsc::sync_channel(0);
                 bytecode.receivers.insert(bytecode_b.id, rx);
@@ -209,6 +221,10 @@ impl Instruction {
                     .recv()
                     .map_err(|e| format!("Receiver failed: {}", e))?;
                 bytecode.stack.push(data);
+                bytecode.position += 1;
+            }
+            Instruction::Log => {
+                println!("\x1b[31mLOG: {}\x1b[0m", bytecode.stack_pop()?);
                 bytecode.position += 1;
             }
             Instruction::Unk => unreachable!(),

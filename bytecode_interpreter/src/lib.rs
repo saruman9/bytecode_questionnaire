@@ -709,7 +709,9 @@ JUMP
     fn spawn() {
         let input = r#"
 // spawn(f1, f2)
+LOAD_VAL 0
 LOAD_VAL 5
+LOAD_VAL 0
 LOAD_VAL 7
 SPAWN
 LOAD_VAL 0
@@ -733,8 +735,10 @@ RETURN_VALUE
     fn send_recv() {
         let input = r#"
 // spawn(f_recv, f_send)
-LOAD_VAL 9
-LOAD_VAL 14
+LOAD_VAL 0
+LOAD_VAL 11
+LOAD_VAL 0
+LOAD_VAL 16
 SPAWN
 
 // return recv(1) + recv(2)
@@ -765,4 +769,78 @@ RETURN_VALUE
         assert_eq!(*bytecode.ret().unwrap(), 42);
     }
 
+    #[ignore = "Not enough time to debug"]
+    #[test]
+    fn fibonacci_multithreaded_without_caching() {
+        let input = r#"
+// fib(11)
+LOAD_VAL 11
+WRITE_VAR input
+
+// n = input
+READ_VAR input
+READ_VAR input
+LOG
+WRITE_VAR n
+
+// if n <= 1
+LOAD_VAL 2
+READ_VAR n
+LOAD_VAL 42
+JUMP_GREATER_THAN
+
+// spawn(fib(n - 1), fib(n - 2))
+READ_VAR n
+LOAD_VAL 1
+SUB
+READ_VAR n
+LOAD_VAL 2
+SUB
+LOAD_VAL 1
+LOAD_VAL 1
+LOAD_VAL 1
+LOAD_VAL 1
+SPAWN
+
+// return fib(n - 1) + fib(n - 2)
+LOAD_VAL 11
+READ_VAR n
+SUB
+LOAD_VAL 1
+ADD
+RECV_CHANNEL
+LOAD_VAL 11
+READ_VAR n
+SUB
+LOAD_VAL 2
+ADD
+RECV_CHANNEL
+ADD
+WRITE_VAR res
+READ_VAR res
+READ_VAR input
+READ_VAR n
+SUB
+SEND_CHANNEL
+READ_VAR res
+RETURN_VALUE
+
+// label return_n:
+// send(n)
+// return n
+READ_VAR n
+READ_VAR input
+READ_VAR n
+SUB
+// FIXME: there will be panic in main thread
+SEND_CHANNEL
+
+READ_VAR n
+RETURN_VALUE
+"#;
+
+        let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
+        bytecode.interpret().unwrap();
+        assert_eq!(*bytecode.ret().unwrap(), 42);
+    }
 }
