@@ -66,6 +66,7 @@ impl ByteCode {
                 .instruction()
                 .interpret(self)
                 .map_err(|e| format!("Line: {}, error: {}", instruction.index(), e))?;
+            // TODO: Remove me pls
             dbg!(instruction, self.position, &self.stack);
         }
         Ok(())
@@ -578,7 +579,7 @@ RETURN_VALUE
     }
 
     #[test]
-    fn while_0() {
+    fn pow() {
         let input = r#"
 // base = 12
 LOAD_VAL 12
@@ -621,5 +622,76 @@ JUMP
         let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
         bytecode.interpret().unwrap();
         assert_eq!(*bytecode.ret().unwrap(), 15_407_021_574_586_368);
+    }
+
+    #[test]
+    fn fibonacci_space_optimized() {
+        let input = r#"
+// fib(33)
+// n = 33
+LOAD_VAL 33
+WRITE_VAR n
+
+// a = 0
+LOAD_VAL 0
+WRITE_VAR a
+
+// b = 1
+LOAD_VAL 1
+WRITE_VAR b
+
+// if n == 0 {
+//   return a
+// }
+READ_VAR n
+LOAD_VAL 0
+LOAD_VAL 36
+JUMP_EQUAL
+
+// for(i = 2; i <= n; i++) {
+//   c = a + b
+//   a = b
+//   b = c
+// }
+LOAD_VAL 2
+WRITE_VAR i
+READ_VAR i
+READ_VAR n
+LOAD_VAL 22
+JUMP_LESS_THAN
+READ_VAR i
+READ_VAR n
+LOAD_VAL 22
+JUMP_EQUAL
+
+// return b
+READ_VAR b
+RETURN_VALUE
+
+// body from for statement
+READ_VAR a
+READ_VAR b
+ADD
+WRITE_VAR c
+READ_VAR b
+WRITE_VAR a
+READ_VAR c
+WRITE_VAR b
+READ_VAR i
+LOAD_VAL 1
+ADD
+WRITE_VAR i
+LOAD_VAL 12
+JUMP
+
+// label: if n == 0 than return 0
+READ_VAR a
+LOAD_VAL 17
+JUMP
+"#;
+
+        let mut bytecode = ByteCode::from_bytecode_text(input).unwrap();
+        bytecode.interpret().unwrap();
+        assert_eq!(*bytecode.ret().unwrap(), 3_524_578);
     }
 }
